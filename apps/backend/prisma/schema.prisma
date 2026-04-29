@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String             @id @default(uuid())
+  name           String             @db.VarChar(150)
+  email          String             @unique @db.VarChar(150)
+  passwordHash   String             @map("password_hash")
+  role           String             @db.VarChar(30)
+  parentAdminId  String?            @map("parent_admin_id")
+  isActive       Boolean            @default(true) @map("is_active")
+  portalTokenVersion Int            @default(0) @map("portal_token_version")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  parentAdmin    User?              @relation("AdminUsers", fields: [parentAdminId], references: [id])
+  apiUsers       User[]             @relation("AdminUsers")
+  apiKeys        ApiKey[]
+  sessions       WhatsAppSession[]
+  actorAudits    AuditLog[]         @relation("ActorAudits")
+  messageLogs    MessageLog[]
+
+  @@map("users")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  name       String    @db.VarChar(150)
+  keyHash    String    @map("key_hash")
+  rawKeyEnc  String?   @map("raw_key_enc")
+  isActive   Boolean   @default(true) @map("is_active")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([keyHash])
+  @@index([userId])
+  @@map("api_keys")
+}
+
+model WhatsAppSession {
+  id           String              @id @default(uuid())
+  userId       String              @map("user_id")
+  label        String              @db.VarChar(150)
+  phoneNumber  String?             @map("phone_number") @db.VarChar(50)
+  pushName     String?             @map("push_name") @db.VarChar(150)
+  status       String              @db.VarChar(30)
+  lastSeenAt   DateTime?           @map("last_seen_at")
+  qrExpiresAt  DateTime?           @map("qr_expires_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  user         User                @relation(fields: [userId], references: [id])
+  authState    WhatsAppAuthState[]
+  messageLogs  MessageLog[]
+  usageDaily   UsageDaily[]
+  connections  ConnectionLog[]
+
+  @@index([userId])
+  @@map("whatsapp_sessions")
+}
+
+model WhatsAppAuthState {
+  id         String   @id @default(uuid())
+  sessionId  String   @unique @map("session_id")
+  credsJson  String   @map("creds_json")
+  keysJson   String   @map("keys_json")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  session    WhatsAppSession @relation(fields: [sessionId], references: [id])
+
+  @@map("whatsapp_auth_state")
+}
+
+model MessageLog {
+  id          String   @id @default(uuid())
+  sessionId    String   @map("session_id")
+  userId       String   @map("user_id")
+  jobId        String?  @unique @map("job_id")
+  providerMessageId String? @map("provider_message_id")
+  direction    String   @db.VarChar(20)
+  toNumber     String?  @map("to_number") @db.VarChar(50)
+  messageType  String   @map("message_type") @db.VarChar(30)
+  status       String   @db.VarChar(30)
+  errorText    String?  @map("error_text")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+  session      WhatsAppSession @relation(fields: [sessionId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([sessionId, createdAt])
+  @@map("message_logs")
+}
+
+model UsageDaily {
+  id            String   @id @default(uuid())
+  sessionId      String   @map("session_id")
+  date           DateTime @db.Date
+  sentCount      Int      @default(0) @map("sent_count")
+  receivedCount  Int      @default(0) @map("received_count")
+  failedCount    Int      @default(0) @map("failed_count")
+  session        WhatsAppSession @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionId, date])
+  @@map("usage_daily")
+}
+
+model ConnectionLog {
+  id          String   @id @default(uuid())
+  sessionId    String   @map("session_id")
+  eventType    String   @map("event_type") @db.VarChar(100)
+  payloadJson  Json     @map("payload_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+  session      WhatsAppSession @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId, createdAt])
+  @@map("connection_logs")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorUserId   String?  @map("actor_user_id")
+  action        String   @db.VarChar(100)
+  targetType    String   @map("target_type") @db.VarChar(50)
+  targetId      String   @map("target_id") @db.VarChar(100)
+  payloadJson   Json     @map("payload_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+  actorUser     User?    @relation("ActorAudits", fields: [actorUserId], references: [id])
+
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+}

@@ -1,0 +1,17 @@
+{
+  "name": "whatsapp-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @whatsapp-platform/common && npm run build -w @whatsapp-platform/backend && npm run build -w @whatsapp-platform/worker && npm run build -w @whatsapp-platform/frontend",
+    "dev": "echo \"Run individual workspace dev scripts\"",
+    "test": "node --test tests/*.test.js",
+    "prisma:generate": "npm run prisma:generate -w @whatsapp-platform/backend",
+    "prisma:migrate": "npm run prisma:migrate -w @whatsapp-platform/backend",
+    "prisma:seed": "npm run prisma:seed -w @whatsapp-platform/backend"
+  }
+}

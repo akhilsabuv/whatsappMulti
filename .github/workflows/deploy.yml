@@ -1,0 +1,156 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: lightsail-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ vars.SSH_PORT || '22' }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/whatsapp' }}
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.npm-cache' \
+            --exclude='.next' \
+            --exclude='dist' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='certbot' \
+            --exclude='*.pem' \
+            -czf /tmp/whatsapp-release.tgz .
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "sudo mkdir -p '$DEPLOY_PATH' && sudo chown '$SSH_USER:$SSH_USER' '$DEPLOY_PATH'"
+          scp -i ~/.ssh/deploy_key -P "$SSH_PORT" /tmp/whatsapp-release.tgz "$SSH_USER@$SSH_HOST:/tmp/whatsapp-release.tgz"
+
+      - name: Deploy with Docker Compose
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/whatsapp' }}
+          DOMAIN: wcp.aiesys.in
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' DOMAIN='$DOMAIN' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | sudo sh
+            sudo usermod -aG docker "$USER" || true
+          fi
+
+          release_dir="$(mktemp -d)"
+          tar -xzf /tmp/whatsapp-release.tgz -C "$release_dir"
+
+          existing_new_env=false
+          if [ -f .env ] && grep -q '^WHATSAPP_PLATFORM_ENV_VERSION=1$' .env; then
+            existing_new_env=true
+            cp .env "$release_dir/.env"
+          else
+            if [ -f .env ]; then
+              cp .env ".env.backup.$(date +%Y%m%d%H%M%S)"
+            fi
+
+            postgres_password="$(openssl rand -hex 24 | tr -d '\n')"
+            jwt_secret="$(openssl rand -base64 48 | tr -d '\n')"
+            encryption_secret="$(openssl rand -hex 16 | tr -d '\n')"
+            superadmin_password="$(openssl rand -hex 18 | tr -d '\n')"
+            admin_password="$(openssl rand -hex 18 | tr -d '\n')"
+
+            cat > "$release_dir/.env" <<ENV
+          WHATSAPP_PLATFORM_ENV_VERSION=1
+          NODE_ENV=production
+          POSTGRES_DB=whatsapp_platform
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=$postgres_password
+          DATABASE_URL=postgresql://postgres:$postgres_password@postgres:5432/whatsapp_platform?schema=public
+          REDIS_URL=redis://redis:6379
+          JWT_SECRET=$jwt_secret
+          ENCRYPTION_SECRET=$encryption_secret
+          PUBLIC_APP_URL=https://$DOMAIN
+          PUBLIC_API_URL=https://$DOMAIN
+          ALLOWED_ORIGINS=https://$DOMAIN
+          NEXT_PUBLIC_API_URL=https://$DOMAIN
+          NEXT_PUBLIC_SOCKET_URL=https://$DOMAIN
+          SUPERADMIN_EMAIL=owner@$DOMAIN
+          SUPERADMIN_PASSWORD=$superadmin_password
+          DEFAULT_ADMIN_EMAIL=admin@$DOMAIN
+          DEFAULT_ADMIN_PASSWORD=$admin_password
+          ENABLE_SWAGGER=false
+          FILE_MAX_MB=10
+          UPLOAD_DIR=/shared/uploads
+          MOCK_WHATSAPP=false
+          PORTAL_TOKEN_TTL=24h
+          CLAMSCAN_PATH=
+          REQUIRE_MALWARE_SCAN=false
+          CLAMSCAN_TIMEOUT_MS=30000
+          ALERT_WEBHOOK_URL=
+          DEAD_LETTER_RETAIN_COUNT=500
+          ENV
+            chmod 600 "$release_dir/.env"
+          fi
+
+          if [ -d certbot ]; then
+            cp -a certbot "$release_dir/certbot"
+          fi
+
+          if [ -f docker-compose.prod.yml ]; then
+            docker compose -f docker-compose.prod.yml down --remove-orphans || true
+          elif [ -f docker-compose.yml ]; then
+            if [ "$existing_new_env" = "true" ]; then
+              docker compose -f docker-compose.yml down --remove-orphans || true
+            else
+              docker compose -f docker-compose.yml down --volumes --remove-orphans || true
+            fi
+          fi
+
+          find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name 'certbot' -exec rm -rf {} +
+          cp -a "$release_dir"/. "$DEPLOY_PATH"/
+          rm -rf "$release_dir"
+
+          if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
+            docker run --rm \
+              -p 80:80 \
+              -v "$DEPLOY_PATH/certbot/conf:/etc/letsencrypt" \
+              -v "$DEPLOY_PATH/certbot/www:/var/www/certbot" \
+              certbot/certbot certonly \
+              --standalone \
+              --non-interactive \
+              --agree-tos \
+              --register-unsafely-without-email \
+              -d "$DOMAIN"
+          fi
+
+          docker compose -f docker-compose.prod.yml up --build -d
+          docker compose -f docker-compose.prod.yml ps
+          REMOTE

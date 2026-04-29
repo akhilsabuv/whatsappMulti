@@ -1,0 +1,77 @@
+<div id="whatsapp-qr">Loading QR...</div>
+<div id="qr-status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
+<script>
+    const qrContainer = document.getElementById("whatsapp-qr");
+    const statusBox = document.getElementById("qr-status");
+
+    let currentQr = null;
+    let polling = true;
+
+    async function fetchQR() {
+        if (!polling) return;
+
+        try {
+            const res = await fetch("http://localhost:3001/api/session/request-qr", {
+                method: "POST",
+                headers: {
+                    "X-API-Key": "AIzaMCiYe9uw-kCQa6T7Bo-5D0xGJrpFSI_0NQB"
+                }
+            });
+
+            const response = await res.json();
+
+            statusBox.innerText = `Status: ${response.status}`;
+
+            if (response.status === "connected") {
+                polling = false;
+                qrContainer.innerHTML = "✅ WhatsApp connected";
+                statusBox.innerText = "Connected successfully";
+                return;
+            }
+
+            if (response.status === "pending_qr" && response.qr) {
+                if (response.qr !== currentQr) {
+                    currentQr = response.qr;
+                    renderQR(response.qr);
+                }
+            }
+
+        } catch (error) {
+            console.error(error);
+            statusBox.innerText = "Error loading QR";
+        }
+    }
+
+    function renderQR(qrText) {
+        qrContainer.innerHTML = "";
+
+        QRCode.toCanvas(qrText, {
+            width: 280,
+            margin: 2
+        }, function (error, canvas) {
+            if (error) {
+                console.error(error);
+                qrContainer.innerHTML = "Failed to generate QR";
+                return;
+            }
+
+            qrContainer.appendChild(canvas);
+        });
+    }
+
+    // Fetch immediately
+    fetchQR();
+
+    // Refresh every 5 seconds
+    const interval = setInterval(() => {
+        if (!polling) {
+            clearInterval(interval);
+            return;
+        }
+
+        fetchQR();
+    }, 10000);
+</script>

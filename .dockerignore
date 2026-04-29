@@ -1,0 +1,14 @@
+node_modules
+.npm-cache
+.next
+dist
+.turbo
+.git
+.github
+.env
+.env.*
+coverage
+certbot
+*.pem
+.DS_Store
+npm-debug.log*
