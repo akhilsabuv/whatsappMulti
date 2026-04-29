@@ -120,10 +120,6 @@ jobs:
             chmod 600 "$release_dir/.env"
           fi
 
-          if [ -d certbot ]; then
-            cp -a certbot "$release_dir/certbot"
-          fi
-
           if [ -f docker-compose.prod.yml ]; then
             docker compose -f docker-compose.prod.yml down --remove-orphans || true
           elif [ -f docker-compose.yml ]; then
