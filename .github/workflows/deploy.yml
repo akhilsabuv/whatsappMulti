@@ -59,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' DOMAIN='$DOMAIN' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$DEPLOY_PATH' DOMAIN='$DOMAIN' SERVER_IP='$SSH_HOST' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "$DEPLOY_PATH"
@@ -71,6 +71,17 @@ jobs:
 
           release_dir="$(mktemp -d)"
           tar -xzf /tmp/whatsapp-release.tgz -C "$release_dir"
+
+          set_env_var() {
+            key="$1"
+            value="$2"
+            file="$3"
+            if grep -q "^${key}=" "$file"; then
+              sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+            else
+              printf '%s=%s\n' "$key" "$value" >> "$file"
+            fi
+          }
 
           existing_new_env=false
           if [ -f .env ] && grep -q '^WHATSAPP_PLATFORM_ENV_VERSION=1$' .env; then
@@ -99,9 +110,9 @@ jobs:
           ENCRYPTION_SECRET=$encryption_secret
           PUBLIC_APP_URL=https://$DOMAIN
           PUBLIC_API_URL=https://$DOMAIN
-          ALLOWED_ORIGINS=https://$DOMAIN
-          NEXT_PUBLIC_API_URL=https://$DOMAIN
-          NEXT_PUBLIC_SOCKET_URL=https://$DOMAIN
+          ALLOWED_ORIGINS=https://$DOMAIN,http://$SERVER_IP
+          NEXT_PUBLIC_API_URL=
+          NEXT_PUBLIC_SOCKET_URL=
           SUPERADMIN_EMAIL=owner@$DOMAIN
           SUPERADMIN_PASSWORD=$superadmin_password
           DEFAULT_ADMIN_EMAIL=admin@$DOMAIN
@@ -119,6 +130,12 @@ jobs:
           ENV
             chmod 600 "$release_dir/.env"
           fi
+
+          set_env_var PUBLIC_APP_URL "https://$DOMAIN" "$release_dir/.env"
+          set_env_var PUBLIC_API_URL "https://$DOMAIN" "$release_dir/.env"
+          set_env_var ALLOWED_ORIGINS "https://$DOMAIN,http://$SERVER_IP" "$release_dir/.env"
+          set_env_var NEXT_PUBLIC_API_URL "" "$release_dir/.env"
+          set_env_var NEXT_PUBLIC_SOCKET_URL "" "$release_dir/.env"
 
           if [ -f docker-compose.prod.yml ]; then
             docker compose -f docker-compose.prod.yml down --remove-orphans || true

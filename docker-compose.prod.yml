@@ -49,9 +49,9 @@ services:
       REDIS_URL: ${REDIS_URL}
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
-      PUBLIC_APP_URL: https://wcp.aiesys.in
-      PUBLIC_API_URL: https://wcp.aiesys.in
-      ALLOWED_ORIGINS: https://wcp.aiesys.in
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://wcp.aiesys.in}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://wcp.aiesys.in}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://wcp.aiesys.in,http://13.206.189.158}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
       DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL}
@@ -89,8 +89,8 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: https://wcp.aiesys.in
-      NEXT_PUBLIC_SOCKET_URL: https://wcp.aiesys.in
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-}
     depends_on:
       - backend
 
