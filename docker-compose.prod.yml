@@ -60,6 +60,7 @@ services:
       ENABLE_SWAGGER: "false"
       FILE_MAX_MB: 10
       UPLOAD_DIR: /shared/uploads
+      MOCK_WHATSAPP: ${MOCK_WHATSAPP:-false}
     volumes:
       - uploads_data:/shared/uploads
     depends_on:
@@ -77,6 +78,9 @@ services:
       REDIS_URL: ${REDIS_URL}
       ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
       UPLOAD_DIR: /shared/uploads
+      MOCK_WHATSAPP: ${MOCK_WHATSAPP:-false}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      DEAD_LETTER_RETAIN_COUNT: ${DEAD_LETTER_RETAIN_COUNT:-500}
     volumes:
       - uploads_data:/shared/uploads
     depends_on:
