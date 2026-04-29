@@ -85,6 +85,19 @@ export function isSwaggerEnabled() {
   return process.env.ENABLE_SWAGGER === 'true' || (!isProduction() && process.env.ENABLE_SWAGGER !== 'false');
 }
 
-export function isSecureCookieEnabled() {
+export function isSecureCookieEnabled(request?: { headers?: Record<string, unknown>; secure?: boolean }) {
+  if (process.env.COOKIE_SECURE === 'false') {
+    return false;
+  }
+
+  if (request) {
+    const forwardedProto = request.headers?.['x-forwarded-proto'];
+    if (typeof forwardedProto === 'string') {
+      return forwardedProto.split(',')[0]?.trim() === 'https';
+    }
+
+    return request.secure === true;
+  }
+
   return isProduction() || process.env.COOKIE_SECURE === 'true';
 }

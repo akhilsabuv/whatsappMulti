@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { randomBytes } from 'crypto';
 import { ChangeOwnPasswordDto, LoginDto } from '../dto';
 import { PlatformService } from '../platform.service';
@@ -14,11 +14,11 @@ export class AuthController {
   constructor(private readonly platformService: PlatformService) {}
 
   @Post('login')
-  async login(@Body() body: LoginDto, @Res({ passthrough: true }) response: Response) {
+  async login(@Body() body: LoginDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
     const result = await this.platformService.login(body.email, body.password);
-    setAuthCookie(response, result.accessToken);
+    setAuthCookie(response, result.accessToken, request);
     const csrfToken = randomBytes(32).toString('base64url');
-    setCsrfCookie(response, csrfToken);
+    setCsrfCookie(response, csrfToken, request);
     return { user: result.user, accessToken: result.accessToken, csrfToken };
   }
 
@@ -38,8 +38,8 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(200)
-  logout(@Res({ passthrough: true }) response: Response) {
-    clearAuthCookie(response);
+  logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    clearAuthCookie(response, request);
     return { success: true };
   }
 }
