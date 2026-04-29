@@ -164,6 +164,16 @@ jobs:
               -d "$DOMAIN"
           fi
 
+          renewal_file="certbot/conf/renewal/$DOMAIN.conf"
+          if [ -f "$renewal_file" ]; then
+            sed -i 's/^authenticator = .*/authenticator = webroot/' "$renewal_file"
+            if grep -q '^webroot_path =' "$renewal_file"; then
+              sed -i 's|^webroot_path = .*|webroot_path = /var/www/certbot|' "$renewal_file"
+            else
+              sed -i '/^authenticator = webroot/a webroot_path = /var/www/certbot' "$renewal_file"
+            fi
+          fi
+
           docker compose -f docker-compose.prod.yml up --build -d
           docker compose -f docker-compose.prod.yml ps
           REMOTE
