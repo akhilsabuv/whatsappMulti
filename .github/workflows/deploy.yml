@@ -166,11 +166,11 @@ jobs:
 
           renewal_file="certbot/conf/renewal/$DOMAIN.conf"
           if [ -f "$renewal_file" ]; then
-            sed -i 's/^authenticator = .*/authenticator = webroot/' "$renewal_file"
-            if grep -q '^webroot_path =' "$renewal_file"; then
-              sed -i 's|^webroot_path = .*|webroot_path = /var/www/certbot|' "$renewal_file"
+            sudo sed -i 's/^authenticator = .*/authenticator = webroot/' "$renewal_file"
+            if sudo grep -q '^webroot_path =' "$renewal_file"; then
+              sudo sed -i 's|^webroot_path = .*|webroot_path = /var/www/certbot|' "$renewal_file"
             else
-              sed -i '/^authenticator = webroot/a webroot_path = /var/www/certbot' "$renewal_file"
+              sudo sed -i '/^authenticator = webroot/a webroot_path = /var/www/certbot' "$renewal_file"
             fi
           fi
 
