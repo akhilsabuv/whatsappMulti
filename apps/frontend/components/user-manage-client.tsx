@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { confirmAction } from '../lib/alerts';
 import { csrfHeaders } from '../lib/csrf';
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
 type ApiKeyItem = {
   id: string;

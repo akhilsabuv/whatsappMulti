@@ -10,8 +10,8 @@ import { csrfHeaders } from '../lib/csrf';
 import type { DashboardView } from '../lib/dashboard-views';
 import { DASHBOARD_VIEWS } from '../lib/dashboard-views';
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ?? 'http://localhost:3001';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
 const eventPageSize = 5;
 const eventHistoryLimit = 80;
 

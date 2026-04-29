@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
 type PortalPayload = {
   user: {
