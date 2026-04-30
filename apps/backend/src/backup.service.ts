@@ -22,6 +22,10 @@ export class BackupService {
         .map(async (filename) => {
           const absolutePath = this.resolveBackupPath(filename);
           const details = await stat(absolutePath);
+          if (details.size === 0) {
+            await unlink(absolutePath).catch(() => null);
+            return null;
+          }
           return {
             filename,
             sizeBytes: details.size,
@@ -30,7 +34,7 @@ export class BackupService {
         }),
     );
 
-    return backups.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return backups.filter((backup): backup is NonNullable<typeof backup> => Boolean(backup)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async createBackup() {
@@ -39,15 +43,20 @@ export class BackupService {
       const filename = this.buildBackupFilename();
       const absolutePath = this.resolveBackupPath(filename);
 
-      await execFileAsync('pg_dump', [
-        '--dbname',
-        this.getDatabaseUrl(),
-        '--format=custom',
-        '--no-owner',
-        '--no-privileges',
-        '--file',
-        absolutePath,
-      ]);
+      try {
+        await execFileAsync('pg_dump', [
+          '--dbname',
+          this.getPostgresToolDatabaseUrl(),
+          '--format=custom',
+          '--no-owner',
+          '--no-privileges',
+          '--file',
+          absolutePath,
+        ]);
+      } catch (error) {
+        await unlink(absolutePath).catch(() => null);
+        throw error;
+      }
 
       const details = await stat(absolutePath);
       await this.pruneOldBackups();
@@ -77,7 +86,7 @@ export class BackupService {
 
       await execFileAsync('pg_restore', [
         '--dbname',
-        this.getDatabaseUrl(),
+        this.getPostgresToolDatabaseUrl(),
         '--clean',
         '--if-exists',
         '--no-owner',
@@ -99,15 +108,20 @@ export class BackupService {
     const filename = this.buildBackupFilename('pre-restore');
     const absolutePath = this.resolveBackupPath(filename);
 
-    await execFileAsync('pg_dump', [
-      '--dbname',
-      this.getDatabaseUrl(),
-      '--format=custom',
-      '--no-owner',
-      '--no-privileges',
-      '--file',
-      absolutePath,
-    ]);
+    try {
+      await execFileAsync('pg_dump', [
+        '--dbname',
+        this.getPostgresToolDatabaseUrl(),
+        '--format=custom',
+        '--no-owner',
+        '--no-privileges',
+        '--file',
+        absolutePath,
+      ]);
+    } catch (error) {
+      await unlink(absolutePath).catch(() => null);
+      throw error;
+    }
 
     return filename;
   }
@@ -160,10 +174,13 @@ export class BackupService {
     return absolutePath;
   }
 
-  private getDatabaseUrl() {
+  private getPostgresToolDatabaseUrl() {
     if (!process.env.DATABASE_URL) {
       throw new BadRequestException('DATABASE_URL is not configured');
     }
-    return process.env.DATABASE_URL;
+
+    const databaseUrl = new URL(process.env.DATABASE_URL);
+    databaseUrl.searchParams.delete('schema');
+    return databaseUrl.toString();
   }
 }
