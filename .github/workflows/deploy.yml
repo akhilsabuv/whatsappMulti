@@ -57,6 +57,12 @@ jobs:
           . ./.env
           set +a
 
+          # Ensure docker components are running before attempting backup
+          docker compose -f docker-compose.prod.yml up -d
+          
+          # Wait a few seconds for postgres to be ready if it was just started
+          sleep 5
+
           docker compose -f docker-compose.prod.yml exec -T postgres \
             pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges \
             | docker run --rm -i -v whatsapp_backups_data:/backups alpine \
