@@ -226,11 +226,26 @@ jobs:
             fi
           fi
 
+          # --- MAINTENANCE MODE START ---
+          cp -r "$release_dir/infra/maintenance" /tmp/maintenance
+          cp "$release_dir/infra/nginx/maintenance.conf" /tmp/maintenance.conf
+          sed -i "s/YOUR_DOMAIN_HERE/$DOMAIN/g" /tmp/maintenance.conf
+
+          if [ -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
+            docker run -d --name maintenance-page -p 80:80 -p 443:443 \
+              -v "/tmp/maintenance:/usr/share/nginx/html:ro" \
+              -v "/tmp/maintenance.conf:/etc/nginx/conf.d/default.conf:ro" \
+              -v "$DEPLOY_PATH/certbot/conf:/etc/letsencrypt:ro" \
+              nginx:alpine
+          fi
+          # --- MAINTENANCE MODE END ---
+
           find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name 'certbot' -exec rm -rf {} +
           cp -a "$release_dir"/. "$DEPLOY_PATH"/
           rm -rf "$release_dir"
 
           if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
+            docker rm -f maintenance-page || true
             docker run --rm \
               -p 80:80 \
               -v "$DEPLOY_PATH/certbot/conf:/etc/letsencrypt" \
@@ -253,6 +268,8 @@ jobs:
             fi
           fi
 
-          docker compose -f docker-compose.prod.yml up --build -d
+          docker compose -f docker-compose.prod.yml build
+          docker rm -f maintenance-page || true
+          docker compose -f docker-compose.prod.yml up -d
           docker compose -f docker-compose.prod.yml ps
           REMOTE
