@@ -103,6 +103,19 @@ export class BackupService {
     });
   }
 
+  async deleteBackup(filename: string) {
+    return this.runExclusive(async () => {
+      const absolutePath = this.resolveBackupPath(filename);
+      try {
+        await stat(absolutePath);
+        await unlink(absolutePath);
+      } catch {
+        throw new NotFoundException('Backup not found');
+      }
+      return { success: true, deleted: filename };
+    });
+  }
+
   private async createSafetyBackupBeforeRestore() {
     await mkdir(this.backupDir, { recursive: true });
     const filename = this.buildBackupFilename('pre-restore');

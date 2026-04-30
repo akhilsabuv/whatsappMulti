@@ -1040,6 +1040,25 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
     }
   }
 
+  async function deleteDatabaseBackup(filename: string) {
+    if (!token) return;
+    try {
+      setBackupLoading(true);
+      await fetchJson(`/superadmin/backups/${encodeURIComponent(filename)}`, token, {
+        method: 'DELETE',
+      });
+      toast.success('Backup deleted successfully');
+      if (restoreTarget === filename) {
+        setRestoreTarget(null);
+      }
+      await loadDatabaseBackups();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete backup');
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
   async function restoreDatabaseBackup() {
     if (!token || user?.role !== 'SUPERADMIN' || !restoreTarget) {
       return;
@@ -2173,7 +2192,21 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
                               {new Date(backup.createdAt).toLocaleString()} · {formatBytes(backup.sizeBytes)}
                             </p>
                           </div>
-                          <span className="drive-badge bg-white text-slate">{restoreTarget === backup.filename ? 'Selected' : 'Backup'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="drive-badge bg-white text-slate">{restoreTarget === backup.filename ? 'Selected' : 'Backup'}</span>
+                            <button
+                              className="rounded-full border border-line bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:border-red-600 hover:text-red-700 disabled:opacity-50"
+                              disabled={backupLoading}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Are you sure you want to delete ${backup.filename}?`)) {
+                                  void deleteDatabaseBackup(backup.filename);
+                                }
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </button>
                     ))

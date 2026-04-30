@@ -66,6 +66,11 @@ export class SuperadminController {
     return this.backupService.restoreBackup(filename, body.confirmation ?? '');
   }
 
+  @Delete('backups/:filename')
+  deleteBackup(@Param('filename') filename: string) {
+    return this.backupService.deleteBackup(filename);
+  }
+
   @Patch('admins/:id/status')
   setAdminStatus(@Req() request: { user: UserEntity }, @Param('id') id: string, @Body() body: StatusDto) {
     return this.platformService.superadminSetAdminStatus(request.user, id, body.isActive);
