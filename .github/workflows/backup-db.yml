@@ -1,0 +1,94 @@
+name: Back up production database
+
+on:
+  schedule:
+    # 10:00 PM Asia/Kolkata daily. GitHub schedules use UTC.
+    - cron: '30 16 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: lightsail-production-db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ vars.SSH_PORT || '22' }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Back up PostgreSQL to server volume and backup repository
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/whatsapp' }}
+          BACKUP_REPO: git@github.com:akhilsabuv/whatsappMultiBackupDB.git
+          BACKUP_REPO_SSH_KEY: ${{ secrets.BACKUP_REPO_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          timestamp="$(date -u +%Y%m%d-%H%M%S)"
+          backup_file="whatsapp-platform-${timestamp}.dump"
+          backup_path="$RUNNER_TEMP/$backup_file"
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' BACKUP_FILE='$backup_file' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          set -a
+          . ./.env
+          set +a
+
+          docker compose -f docker-compose.prod.yml exec -T postgres \
+            pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges \
+            | docker run --rm -i -v whatsapp_backups_data:/backups alpine \
+                sh -c "mkdir -p /backups/database && cat > /backups/database/$BACKUP_FILE"
+
+          docker run --rm -v whatsapp_backups_data:/backups alpine test -s "/backups/database/$BACKUP_FILE"
+          REMOTE
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "docker run --rm -v whatsapp_backups_data:/backups alpine cat '/backups/database/$backup_file'" \
+            > "$backup_path"
+
+          if [ ! -s "$backup_path" ]; then
+            echo "Database backup was empty."
+            exit 1
+          fi
+
+          if [ -z "$BACKUP_REPO_SSH_KEY" ]; then
+            echo "BACKUP_REPO_SSH_KEY is not configured; backup was saved on the server volume only."
+            exit 0
+          fi
+
+          backup_key="$RUNNER_TEMP/backup_repo_key"
+          printf '%s\n' "$BACKUP_REPO_SSH_KEY" > "$backup_key"
+          chmod 600 "$backup_key"
+          export GIT_SSH_COMMAND="ssh -i $backup_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+          backup_repo_dir="$RUNNER_TEMP/backup-repo"
+          git clone "$BACKUP_REPO" "$backup_repo_dir"
+          cd "$backup_repo_dir"
+          git checkout -B main
+          mkdir -p database
+          cp "$backup_path" "database/$backup_file"
+          cat > latest.json <<JSON
+          {
+            "filename": "$backup_file",
+            "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "sourceHost": "$SSH_HOST"
+          }
+          JSON
+          git config user.name "whatsapp-db-backup"
+          git config user.email "actions@github.com"
+          git add database latest.json
+          git commit -m "Back up database $timestamp"
+          git push origin main
