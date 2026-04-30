@@ -1044,12 +1044,10 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
     if (!token) return;
     try {
       setBackupLoading(true);
-      await fetchJson(`/superadmin/backups/${encodeURIComponent(filename)}`, token, {
-        method: 'DELETE',
-      });
+      await deleteJson(`/superadmin/backups/${encodeURIComponent(filename)}`, token);
       toast.success('Backup deleted successfully');
       if (restoreTarget === filename) {
-        setRestoreTarget(null);
+        setRestoreTarget('');
       }
       await loadDatabaseBackups();
     } catch (error) {
