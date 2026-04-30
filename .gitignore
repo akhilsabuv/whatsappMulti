@@ -13,3 +13,6 @@ apps/backend/prisma/dev.db-journal
 /whatsappApi.pem
 /backups/
 /.deploy-keys/
+/generate_qr.html
+/send_message.html
+/widget_qr.html

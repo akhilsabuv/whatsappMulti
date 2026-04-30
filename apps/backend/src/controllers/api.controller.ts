@@ -9,6 +9,7 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  Param,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -181,6 +182,17 @@ export class ApiController {
       mimeType: verifiedMimeType,
       storagePath: file.path,
     });
+  }
+
+  @Get('messages/:id/status')
+  @ApiOperation({
+    summary: 'Get the status of a specific message',
+    description: 'Retrieves the current status and metadata of a message previously sent.',
+  })
+  @ApiResponse({ status: 200, description: 'Message status retrieved successfully.' })
+  @ApiResponse({ status: 404, description: 'Message not found.' })
+  messageStatus(@Req() request: { apiUser: { id: string } }, @Param('id') id: string) {
+    return this.platformService.getMessageStatus(request.apiUser.id, id);
   }
 
   @Get('usage/me')

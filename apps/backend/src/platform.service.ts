@@ -773,6 +773,33 @@ export class PlatformService {
     }));
   }
 
+  async getMessageStatus(userId: string, messageId: string) {
+    const message = await this.prisma.messageLog.findFirst({
+      where: {
+        id: messageId,
+        userId: userId,
+      },
+      select: {
+        id: true,
+        jobId: true,
+        providerMessageId: true,
+        direction: true,
+        toNumber: true,
+        messageType: true,
+        status: true,
+        errorText: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    return message;
+  }
+
   async getManagedUserMessages(admin: UserEntity, userId: string) {
     await this.assertManagedApiUser(admin, userId);
     return this.prisma.messageLog.findMany({
