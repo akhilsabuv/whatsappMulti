@@ -48,7 +48,23 @@ jobs:
           fi
 
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "cd '$DEPLOY_PATH' && set -a && . ./.env && set +a && docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" --format=custom --no-owner --no-privileges" \
+            "DEPLOY_PATH='$DEPLOY_PATH' BACKUP_FILE='$backup_file' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          set -a
+          . ./.env
+          set +a
+
+          docker compose -f docker-compose.prod.yml exec -T postgres \
+            pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges \
+            | docker run --rm -i -v whatsapp_backups_data:/backups alpine \
+                sh -c "mkdir -p /backups/database && cat > /backups/database/$BACKUP_FILE"
+
+          docker run --rm -v whatsapp_backups_data:/backups alpine test -s "/backups/database/$BACKUP_FILE"
+          REMOTE
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "docker run --rm -v whatsapp_backups_data:/backups alpine cat '/backups/database/$backup_file'" \
             > "$backup_path"
 
           if [ ! -s "$backup_path" ]; then
