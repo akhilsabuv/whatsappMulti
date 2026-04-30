@@ -237,7 +237,7 @@ jobs:
           cp "$release_dir/infra/nginx/maintenance.conf" /tmp/maintenance.conf
           sed -i "s/YOUR_DOMAIN_HERE/$DOMAIN/g" /tmp/maintenance.conf
 
-          if [ -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
+          if sudo test -f "$DEPLOY_PATH/certbot/conf/live/$DOMAIN/fullchain.pem"; then
             docker run -d --name maintenance-page -p 80:80 -p 443:443 \
               -v "/tmp/maintenance:/usr/share/nginx/html:ro" \
               -v "/tmp/maintenance.conf:/etc/nginx/conf.d/default.conf:ro" \
@@ -250,7 +250,7 @@ jobs:
           cp -a "$release_dir"/. "$DEPLOY_PATH"/
           rm -rf "$release_dir"
 
-          if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
+          if ! sudo test -f "$DEPLOY_PATH/certbot/conf/live/$DOMAIN/fullchain.pem"; then
             docker rm -f maintenance-page || true
             docker run --rm \
               -p 80:80 \

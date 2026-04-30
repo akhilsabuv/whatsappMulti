@@ -56,6 +56,8 @@ services:
       MOCK_WHATSAPP: ${MOCK_WHATSAPP:-false}
       PORTAL_TOKEN_TTL: ${PORTAL_TOKEN_TTL:-24h}
       BACKEND_PORT: ${BACKEND_PORT:-3001}
+      BACKUP_DIR: ${BACKUP_DIR:-/shared/backups/database}
+      BACKUP_RETAIN_COUNT: ${BACKUP_RETAIN_COUNT:-14}
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,6 +65,7 @@ services:
         condition: service_healthy
     volumes:
       - uploads_data:/shared/uploads
+      - backups_data:/shared/backups
     ports:
       - "${BACKEND_PUBLIC_PORT:-3001}:3001"
     healthcheck:
@@ -118,3 +121,4 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  backups_data:
