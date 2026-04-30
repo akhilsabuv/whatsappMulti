@@ -17,11 +17,23 @@
 
 ## Backup
 
-Run a PostgreSQL backup from the host:
+Deploys run a PostgreSQL backup before the Docker Compose update. To push those dumps to
+`git@github.com:akhilsabuv/whatsappMultiBackupDB.git`, configure the production Actions
+secret `BACKUP_REPO_SSH_KEY` with a write-enabled deploy key for that backup repository.
+
+Superadmins can also create and restore backups from the dashboard Backups tab.
+
+Run a PostgreSQL backup from the host manually:
 
 ```bash
 mkdir -p backups
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom > "backups/whatsapp-platform-$(date +%Y%m%d-%H%M%S).dump"
+```
+
+Run a PostgreSQL backup from the local workstation and push it to the external backup repository:
+
+```bash
+./scripts/backup-db-to-git.sh
 ```
 
 Back up uploaded files:
@@ -65,4 +77,3 @@ docker compose exec redis redis-cli LRANGE queue:dead-letter 0 20
 ```
 
 After fixing the root cause, retry messages from the dashboard/API flow rather than replaying raw jobs blindly.
-

@@ -90,6 +90,12 @@ type ActiveApiKeyLookupResult = {
   };
 };
 
+type DatabaseBackup = {
+  filename: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
 type CreateUserRole = 'API_USER' | 'ADMIN';
 type AdminApiLanguage = 'curl' | 'javascript' | 'python' | 'php';
 
@@ -342,6 +348,23 @@ async function patchJson(path: string, _token: string | undefined, body: unknown
   return response.json();
 }
 
+async function postJson(path: string, _token: string | undefined, body: unknown = {}) {
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const failed = await response.json().catch(() => null);
+    throw new Error(failed?.message ?? `Request failed: ${path}`);
+  }
+  return response.json();
+}
+
 function getSummaryPath(role: string) {
   return role === 'SUPERADMIN' ? '/superadmin/dashboard/summary' : '/admin/dashboard/summary';
 }
@@ -455,6 +478,16 @@ function QrCodeIcon() {
       <path d="M14 14h1v1h-1z" />
       <path d="M17 14h4v7h-4z" />
       <path d="M14 17h1v4h-1z" />
+    </svg>
+  );
+}
+
+function DatabaseIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2">
+      <ellipse cx="12" cy="5" rx="8" ry="3" />
+      <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+      <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
     </svg>
   );
 }
@@ -606,6 +639,16 @@ export function formatRoleLabel(role: string) {
   return 'Admin';
 }
 
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function DashboardClient({ initialView = 'overview' }: { initialView?: DashboardView }) {
   const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
@@ -626,6 +669,10 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
   const [activeKeyLookupEmail, setActiveKeyLookupEmail] = useState('');
   const [activeKeyLookupResult, setActiveKeyLookupResult] = useState<ActiveApiKeyLookupResult | null>(null);
   const [activeKeyLookupLoading, setActiveKeyLookupLoading] = useState(false);
+  const [databaseBackups, setDatabaseBackups] = useState<DatabaseBackup[]>([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState('');
+  const [restoreConfirmation, setRestoreConfirmation] = useState('');
   const [passwordState, setPasswordState] = useState({
     currentPassword: '',
     newPassword: '',
@@ -664,11 +711,19 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
   }, [searchTerm, currentView]);
 
   useEffect(() => {
-    if (user && user.role !== 'SUPERADMIN' && currentView === 'sessions') {
+    if (user && user.role !== 'SUPERADMIN' && (currentView === 'sessions' || currentView === 'backups')) {
       setCurrentView('overview');
       router.replace('/dashboard/overview');
     }
   }, [currentView, router, user]);
+
+  useEffect(() => {
+    if (!token || !user || user.role !== 'SUPERADMIN' || currentView !== 'backups') {
+      return;
+    }
+
+    void loadDatabaseBackups();
+  }, [currentView, token, user]);
 
   useEffect(() => {
     if (!token || !user) {
@@ -955,6 +1010,75 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
     }
   }
 
+  async function loadDatabaseBackups() {
+    if (!token || user?.role !== 'SUPERADMIN') {
+      return;
+    }
+
+    try {
+      const backups = await fetchJson('/superadmin/backups', token);
+      setDatabaseBackups(backups);
+    } catch (backupError) {
+      toast.error(backupError instanceof Error ? backupError.message : 'Unable to load database backups');
+    }
+  }
+
+  async function createDatabaseBackup() {
+    if (!token || user?.role !== 'SUPERADMIN') {
+      return;
+    }
+
+    setBackupLoading(true);
+    try {
+      const created = await postJson('/superadmin/backups', token);
+      toast.success(`Database backup created: ${created.filename}`);
+      await loadDatabaseBackups();
+    } catch (backupError) {
+      toast.error(backupError instanceof Error ? backupError.message : 'Unable to create database backup');
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
+  async function restoreDatabaseBackup() {
+    if (!token || user?.role !== 'SUPERADMIN' || !restoreTarget) {
+      return;
+    }
+
+    if (restoreConfirmation !== 'CLEAR_AND_RESTORE') {
+      toast.error('Type CLEAR_AND_RESTORE to restore this backup.');
+      return;
+    }
+
+    const confirmed = await confirmAction({
+      title: 'Restore database backup?',
+      text: 'This will clear current production database tables and restore the selected backup.',
+      confirmButtonText: 'Restore backup',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setBackupLoading(true);
+    try {
+      const restored = await postJson(`/superadmin/backups/${encodeURIComponent(restoreTarget)}/restore`, token, {
+        confirmation: restoreConfirmation,
+      });
+      toast.success(`Database restored from ${restored.restoredFrom}. Safety backup: ${restored.safetyBackup}`);
+      setRestoreConfirmation('');
+      await loadDatabaseBackups();
+      await Promise.all([
+        fetchJson(getSummaryPath(user.role), token).then((data) => setSummary(data)),
+        fetchJson(getUsersPath(user.role), token).then((data) => setUsers(data)),
+      ]);
+    } catch (restoreError) {
+      toast.error(restoreError instanceof Error ? restoreError.message : 'Unable to restore database backup');
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
   async function changeOwnPassword() {
     if (!token || !user) {
       return;
@@ -1082,13 +1206,14 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
   const selectedActiveApiKeyExample = activeApiKeyExamples[selectedAdminApiLanguage];
 
   const canViewSessionHealth = user.role === 'SUPERADMIN';
-  const activeView = canViewSessionHealth || currentView !== 'sessions' ? currentView : 'overview';
+  const activeView = user.role === 'SUPERADMIN' || !['sessions', 'backups'].includes(currentView) ? currentView : 'overview';
   const navItems: Array<{ id: DashboardView; label: string; icon: JSX.Element }> = [
     { id: 'overview', label: 'Overview', icon: <GridIcon /> },
     { id: 'users', label: 'Managed Users', icon: <UsersIcon /> },
     { id: 'api', label: 'API', icon: <KeyIcon /> },
     { id: 'keys', label: 'API Keys', icon: <KeyIcon /> },
     ...(canViewSessionHealth ? [{ id: 'sessions' as const, label: 'Session Health', icon: <PulseIcon /> }] : []),
+    ...(user.role === 'SUPERADMIN' ? [{ id: 'backups' as const, label: 'Backups', icon: <DatabaseIcon /> }] : []),
     { id: 'settings', label: 'Settings', icon: <ShieldIcon /> },
   ];
 
@@ -1117,6 +1242,11 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
       eyebrow: 'Session Health',
       title: 'Watch live connection state',
       description: 'Monitor QR readiness, reconnect activity, and the latest session-side events from the worker.',
+    },
+    backups: {
+      eyebrow: 'Database Backups',
+      title: 'Back up and restore production data',
+      description: 'Create PostgreSQL dumps and restore a selected backup when production data needs to be rolled back.',
     },
     settings: {
       eyebrow: 'Security Settings',
@@ -2003,6 +2133,86 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
               </section>
             </section>
             </div>
+          ) : null}
+
+          {activeView === 'backups' && user.role === 'SUPERADMIN' ? (
+            <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <section className="drive-section">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">PostgreSQL Dumps</p>
+                    <h3 className="mt-2 text-2xl font-semibold text-ink">Available backups</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate">
+                      Backups are stored on the server volume and the deploy workflow can push dumps to the external backup repository.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <button className="drive-button-secondary" onClick={() => void loadDatabaseBackups()} disabled={backupLoading}>
+                      Refresh
+                    </button>
+                    <button className="drive-button-primary" onClick={() => void createDatabaseBackup()} disabled={backupLoading}>
+                      {backupLoading ? 'Working...' : 'Create backup'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {databaseBackups.length ? (
+                    databaseBackups.map((backup) => (
+                      <button
+                        key={backup.filename}
+                        className={`block w-full rounded-[24px] border px-4 py-4 text-left transition ${
+                          restoreTarget === backup.filename ? 'border-signal bg-signal/5' : 'border-line bg-cloud hover:border-signal/50'
+                        }`}
+                        onClick={() => setRestoreTarget(backup.filename)}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="break-all font-mono text-sm font-semibold text-ink">{backup.filename}</p>
+                            <p className="mt-2 text-xs text-slate">
+                              {new Date(backup.createdAt).toLocaleString()} · {formatBytes(backup.sizeBytes)}
+                            </p>
+                          </div>
+                          <span className="drive-badge bg-white text-slate">{restoreTarget === backup.filename ? 'Selected' : 'Backup'}</span>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="rounded-[24px] border border-line bg-cloud p-4 text-sm text-slate">
+                      No database backups are available yet. Create one before making risky production changes.
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              <section className="drive-section">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-600">Restore</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">Clear and load backup</h3>
+                <p className="mt-2 text-sm leading-6 text-slate">
+                  Restoring clears the current production database tables and loads the selected dump. A safety backup is created immediately before restore.
+                </p>
+
+                <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
+                  <p className="text-sm font-semibold text-ink">Selected backup</p>
+                  <p className="mt-2 break-all font-mono text-sm text-slate">{restoreTarget || 'Select a backup from the list'}</p>
+                </div>
+
+                <input
+                  className="drive-input mt-5"
+                  value={restoreConfirmation}
+                  onChange={(event) => setRestoreConfirmation(event.target.value)}
+                  placeholder="Type CLEAR_AND_RESTORE"
+                />
+
+                <button
+                  className="drive-button-danger mt-5 w-full justify-center"
+                  disabled={!restoreTarget || restoreConfirmation !== 'CLEAR_AND_RESTORE' || backupLoading}
+                  onClick={() => void restoreDatabaseBackup()}
+                >
+                  Restore selected backup
+                </button>
+              </section>
+            </section>
           ) : null}
 
           {activeView === 'settings' ? (

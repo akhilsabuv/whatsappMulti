@@ -11,3 +11,5 @@ coverage
 apps/backend/prisma/dev.db
 apps/backend/prisma/dev.db-journal
 /whatsappApi.pem
+/backups/
+/.deploy-keys/

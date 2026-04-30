@@ -79,3 +79,24 @@ test('queue failures are captured for dead-letter observability', () => {
   assert.match(workerObservability, /ALERT_WEBHOOK_URL/);
   assert.match(backendObservability, /recentDeadLetters/);
 });
+
+test('database backups are superadmin-only and guarded before restore', () => {
+  const superadminController = read('apps/backend/src/controllers/superadmin.controller.ts');
+  const backupService = read('apps/backend/src/backup.service.ts');
+  const dashboardViews = read('apps/frontend/lib/dashboard-views.ts');
+  const dashboard = read('apps/frontend/components/dashboard-client.tsx');
+  const deployWorkflow = read('.github/workflows/deploy.yml');
+
+  assert.match(superadminController, /@Roles\(UserRole\.SUPERADMIN\)/);
+  assert.match(superadminController, /@Get\('backups'\)/);
+  assert.match(superadminController, /@Post\('backups'\)/);
+  assert.match(superadminController, /backups\/:filename\/restore/);
+  assert.match(backupService, /CLEAR_AND_RESTORE/);
+  assert.match(backupService, /pg_dump/);
+  assert.match(backupService, /pg_restore/);
+  assert.match(dashboardViews, /backups/);
+  assert.match(dashboard, /Active Key Lookup/);
+  assert.match(dashboard, /Restore selected backup/);
+  assert.match(deployWorkflow, /Back up production database/);
+  assert.match(deployWorkflow, /whatsappMultiBackupDB/);
+});

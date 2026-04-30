@@ -21,6 +21,7 @@ import { RateLimitGuard } from './security/rate-limit.guard';
 import { UploadSecurityService } from './upload-security.service';
 import { ObservabilityService } from './observability.service';
 import { CsrfGuard } from './security/csrf.guard';
+import { BackupService } from './backup.service';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { CsrfGuard } from './security/csrf.guard';
     WorkerStatusService,
     UploadSecurityService,
     ObservabilityService,
+    BackupService,
     JwtAuthGuard,
     ApiKeyGuard,
     RolesGuard,

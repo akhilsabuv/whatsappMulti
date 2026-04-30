@@ -27,6 +27,64 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "${{ vars.SSH_PORT || '22' }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: Back up production database
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/whatsapp' }}
+          BACKUP_REPO: git@github.com:akhilsabuv/whatsappMultiBackupDB.git
+          BACKUP_REPO_SSH_KEY: ${{ secrets.BACKUP_REPO_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          timestamp="$(date -u +%Y%m%d-%H%M%S)"
+          backup_file="whatsapp-platform-${timestamp}.dump"
+          backup_path="$RUNNER_TEMP/$backup_file"
+
+          if ! ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "test -f '$DEPLOY_PATH/.env' && test -f '$DEPLOY_PATH/docker-compose.prod.yml'"; then
+            echo "No existing production deployment found; skipping database backup."
+            exit 0
+          fi
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd '$DEPLOY_PATH' && set -a && . ./.env && set +a && docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" --format=custom --no-owner --no-privileges" \
+            > "$backup_path"
+
+          if [ ! -s "$backup_path" ]; then
+            echo "Database backup was empty."
+            exit 1
+          fi
+
+          if [ -z "$BACKUP_REPO_SSH_KEY" ]; then
+            echo "BACKUP_REPO_SSH_KEY is not configured; database backup was created on the runner but not pushed to the backup repository."
+            exit 0
+          fi
+
+          backup_key="$RUNNER_TEMP/backup_repo_key"
+          printf '%s\n' "$BACKUP_REPO_SSH_KEY" > "$backup_key"
+          chmod 600 "$backup_key"
+          export GIT_SSH_COMMAND="ssh -i $backup_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+          backup_repo_dir="$RUNNER_TEMP/backup-repo"
+          git clone "$BACKUP_REPO" "$backup_repo_dir"
+          cd "$backup_repo_dir"
+          git checkout -B main
+          mkdir -p database
+          cp "$backup_path" "database/$backup_file"
+          cat > latest.json <<JSON
+          {
+            "filename": "$backup_file",
+            "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "sourceHost": "$SSH_HOST"
+          }
+          JSON
+          git config user.name "whatsapp-db-backup"
+          git config user.email "actions@github.com"
+          git add database latest.json
+          git commit -m "Back up database $timestamp"
+          git push origin main
+
       - name: Upload release
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -136,6 +194,7 @@ jobs:
           set_env_var ALLOWED_ORIGINS "https://$DOMAIN,http://$SERVER_IP" "$release_dir/.env"
           set_env_var NEXT_PUBLIC_API_URL "" "$release_dir/.env"
           set_env_var NEXT_PUBLIC_SOCKET_URL "" "$release_dir/.env"
+          set_env_var BACKUP_RETAIN_COUNT "14" "$release_dir/.env"
 
           if [ -f docker-compose.prod.yml ]; then
             docker compose -f docker-compose.prod.yml down --remove-orphans || true
