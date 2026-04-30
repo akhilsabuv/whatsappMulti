@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate QR Code</title>
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Include qrcode.js in case the API returns text to be rendered -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #qrContainer {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 250px;
+            border: 1px dashed #ccc;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        #qrContainer img {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Request QR Code</h2>
+    
+    <button id="requestQrBtn">Generate QR Code</button>
+
+    <div id="qrContainer">
+        <span id="placeholderText">Click the button to request the QR code</span>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            $("#requestQrBtn").click(function() {
+                // Show loading state
+                $("#qrContainer").empty().html("<span>Loading...</span>");
+
+                var settings = {
+                  "url": "/api/session/request-qr",
+                  "method": "POST",
+                  "timeout": 0,
+                  "headers": {
+                    "X-API-Key": "AIzacBYEfJernn-Cous7P5RJdR2xsrv6TL419WC"
+                  },
+                };
+
+                $.ajax(settings).done(function (response) {
+                    console.log("API Response:", response);
+                    $("#qrContainer").empty(); // Clear loading text
+
+                    // Handle different possible response formats:
+                    
+                    // Case 1: Response contains an image URL or base64 string property
+                    if (response.qrImageUrl || response.image || response.base64) {
+                        var imgUrl = response.qrImageUrl || response.image || response.base64;
+                        // Add data URI prefix if it's a raw base64 string without it
+                        if (typeof imgUrl === 'string' && !imgUrl.startsWith('http') && !imgUrl.startsWith('data:')) {
+                            imgUrl = 'data:image/png;base64,' + imgUrl;
+                        }
+                        $("#qrContainer").append('<img src="' + imgUrl + '" alt="QR Code" />');
+                    } 
+                    // Case 2: Response returns base64 directly
+                    else if (typeof response === 'string' && response.startsWith('data:image')) {
+                        $("#qrContainer").append('<img src="' + response + '" alt="QR Code" />');
+                    }
+                    // Case 3: Response contains raw text to be converted to a QR code
+                    else {
+                        var qrText = typeof response === 'string' ? response : (response.qr || response.data || JSON.stringify(response));
+                        
+                        // Generate QR code on the client side using the included library
+                        new QRCode(document.getElementById("qrContainer"), {
+                            text: qrText,
+                            width: 256,
+                            height: 256,
+                            colorDark : "#000000",
+                            colorLight : "#ffffff",
+                            correctLevel : QRCode.CorrectLevel.H
+                        });
+                    }
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error("Request failed:", textStatus, errorThrown);
+                    $("#qrContainer").html('<span style="color: red;">Request failed. Check console for details.</span>');
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>

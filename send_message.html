@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Send File Message</title>
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Send File Message</h2>
+    
+    <div class="form-group">
+        <label for="fileInput">Select File:</label>
+        <input type="file" id="fileInput">
+    </div>
+    
+    <button id="sendBtn">Send Message</button>
+
+    <script>
+        $(document).ready(function() {
+            $("#sendBtn").click(function() {
+                var fileInput = document.getElementById('fileInput');
+                
+                // Ensure a file is selected
+                if (fileInput.files.length === 0) {
+                    alert("Please select a file first.");
+                    return;
+                }
+
+                // Create FormData
+                var form = new FormData();
+                form.append("to", "60123456789");
+                form.append("type", "file");
+                form.append("text", "Product brochure");
+                form.append("file", fileInput.files[0], fileInput.files[0].name);
+
+                // Configure AJAX request
+                var settings = {
+                  "url": "/api/messages/send",
+                  "method": "POST",
+                  "timeout": 0,
+                  "headers": {
+                    "X-API-Key": "YOUR_API_KEY" // Make sure to replace this with your actual API key
+                  },
+                  "processData": false,
+                  "mimeType": "multipart/form-data",
+                  "contentType": false,
+                  "data": form
+                };
+
+                // Send request
+                $.ajax(settings).done(function (response) {
+                  console.log("Success:", response);
+                  alert("Request successful! Check the console for the response.");
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                  console.error("Error:", textStatus, errorThrown);
+                  alert("Request failed! Check the console for details.");
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>

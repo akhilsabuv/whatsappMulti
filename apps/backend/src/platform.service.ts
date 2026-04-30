@@ -373,6 +373,12 @@ export class PlatformService {
         role: UserRole.API_USER,
         ...(admin.role === UserRole.SUPERADMIN ? {} : { parentAdminId: admin.id }),
       },
+      include: {
+        sessions: {
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
     });
 
     if (!managedUser) {
@@ -424,6 +430,7 @@ export class PlatformService {
         lastUsedAt: activeKey.lastUsedAt,
       },
       docs: this.getApiUserDocsMetadata(),
+      portalShareUrl: this.buildClientPortalUrl(managedUser.id, managedUser.sessions?.[0]?.id ?? null, managedUser.portalTokenVersion),
     };
   }
 
