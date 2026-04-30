@@ -74,6 +74,22 @@ type GeneratedKeyCard = {
   swaggerUrl: string;
 };
 
+type ActiveApiKeyLookupResult = {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  apiKey: {
+    id: string;
+    name: string;
+    rawKey: string | null;
+    isActive: boolean;
+    createdAt?: string;
+    lastUsedAt?: string | null;
+  };
+};
+
 type CreateUserRole = 'API_USER' | 'ADMIN';
 type AdminApiLanguage = 'curl' | 'javascript' | 'python' | 'php';
 
@@ -607,6 +623,9 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
   const [notice, setNotice] = useState<string | null>(null);
   const [generatedKeys, setGeneratedKeys] = useState<GeneratedKeyCard[]>([]);
   const [selectedAdminApiLanguage, setSelectedAdminApiLanguage] = useState<AdminApiLanguage>('curl');
+  const [activeKeyLookupEmail, setActiveKeyLookupEmail] = useState('');
+  const [activeKeyLookupResult, setActiveKeyLookupResult] = useState<ActiveApiKeyLookupResult | null>(null);
+  const [activeKeyLookupLoading, setActiveKeyLookupLoading] = useState(false);
   const [passwordState, setPasswordState] = useState({
     currentPassword: '',
     newPassword: '',
@@ -907,6 +926,32 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
       toast.success(`${label} copied to clipboard.`);
     } catch {
       toast.error(`Unable to copy ${label.toLowerCase()}.`);
+    }
+  }
+
+  async function lookupActiveApiKey() {
+    if (!token) {
+      return;
+    }
+
+    const email = activeKeyLookupEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      toast.error('Enter a valid API user email.');
+      return;
+    }
+
+    setActiveKeyLookupLoading(true);
+    setActiveKeyLookupResult(null);
+    setError(null);
+
+    try {
+      const result = await fetchJson(`/admin/api-users/active-api-key?email=${encodeURIComponent(email)}`, token);
+      setActiveKeyLookupResult(result);
+      toast.success(`Active API key loaded for ${result.user.email}.`);
+    } catch (lookupError) {
+      toast.error(lookupError instanceof Error ? lookupError.message : 'Unable to load active API key');
+    } finally {
+      setActiveKeyLookupLoading(false);
     }
   }
 
@@ -1557,59 +1602,123 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
           ) : null}
 
           {activeView === 'api' ? (
-            <section className="drive-section">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Admin API Reference</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-ink">Create API User</h3>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate">
-                    Use this admin endpoint to create an API user, generate its first API key, and create its primary WhatsApp session.
-                  </p>
+            <section className="space-y-6">
+              <section className="drive-section">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Active Key Lookup</p>
+                    <h3 className="mt-2 text-2xl font-semibold text-ink">Get active API key by email</h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate">
+                      Enter an API user email to fetch the active API key that can be shared with that user.
+                    </p>
+                  </div>
+                  {activeKeyLookupResult?.apiKey.rawKey ? (
+                    <button
+                      className="drive-button-secondary"
+                      onClick={() => copyToClipboard(activeKeyLookupResult.apiKey.rawKey ?? '', `${activeKeyLookupResult.user.email} API key`)}
+                    >
+                      <CopyIcon />
+                      Copy Key
+                    </button>
+                  ) : null}
                 </div>
-                <button
-                  className="drive-button-secondary"
-                  onClick={() => copyToClipboard(selectedCreateApiUserExample, `${adminApiLanguageLabels[selectedAdminApiLanguage]} example`)}
-                >
-                  <CopyIcon />
-                  Copy {adminApiLanguageLabels[selectedAdminApiLanguage]}
-                </button>
-              </div>
 
-              <div className="mt-6 rounded-[24px] border border-line bg-cloud p-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="drive-badge bg-signal/10 text-signal">POST</span>
-                  <span className="font-mono text-sm text-ink">/auth/login</span>
-                  <span className="drive-badge bg-signal/10 text-signal">POST</span>
-                  <span className="font-mono text-sm text-ink">/admin/api-users</span>
-                </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {adminApiLanguages.map((language) => (
-                  <button
-                    key={language}
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                      selectedAdminApiLanguage === language
-                        ? 'bg-ink text-white'
-                        : 'border border-line bg-cloud text-slate'
-                    }`}
-                    onClick={() => setSelectedAdminApiLanguage(language)}
-                  >
-                    {adminApiLanguageLabels[language]}
+                <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                  <input
+                    className="drive-input"
+                    type="email"
+                    value={activeKeyLookupEmail}
+                    onChange={(event) => setActiveKeyLookupEmail(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        void lookupActiveApiKey();
+                      }
+                    }}
+                    placeholder="api-user@example.com"
+                  />
+                  <button className="drive-button-primary justify-center" disabled={activeKeyLookupLoading} onClick={() => void lookupActiveApiKey()}>
+                    {activeKeyLookupLoading ? 'Loading...' : 'Get active key'}
                   </button>
-                ))}
-              </div>
+                </div>
 
-              <div className="mt-5 rounded-3xl bg-[#101826] p-5 text-white shadow-inner">
-                <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-slate-100">
-                  <code>{selectedCreateApiUserExample}</code>
-                </pre>
-              </div>
+                {activeKeyLookupResult ? (
+                  <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-ink">{activeKeyLookupResult.user.name}</p>
+                        <p className="mt-1 text-sm text-slate">{activeKeyLookupResult.user.email}</p>
+                      </div>
+                      <span className="drive-badge bg-warm/10 text-warm">Active</span>
+                    </div>
+                    <div className="mt-4 rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate">{activeKeyLookupResult.apiKey.name}</p>
+                      <p className="mt-3 break-all font-mono text-sm text-ink">
+                        {activeKeyLookupResult.apiKey.rawKey ?? 'Raw key unavailable'}
+                      </p>
+                      <p className="mt-3 text-xs text-slate">
+                        Created {activeKeyLookupResult.apiKey.createdAt ? new Date(activeKeyLookupResult.apiKey.createdAt).toLocaleString() : 'date unavailable'}
+                        {activeKeyLookupResult.apiKey.lastUsedAt
+                          ? ` · Last used ${new Date(activeKeyLookupResult.apiKey.lastUsedAt).toLocaleString()}`
+                          : ' · Never used'}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
 
-              <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Create User Response</p>
-                <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-4 font-mono text-[13px] leading-6 text-slate">
-                  <code>{`{
+              <section className="drive-section">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Admin API Reference</p>
+                    <h3 className="mt-2 text-2xl font-semibold text-ink">Create API User</h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate">
+                      Use this admin endpoint to create an API user, generate its first API key, and create its primary WhatsApp session.
+                    </p>
+                  </div>
+                  <button
+                    className="drive-button-secondary"
+                    onClick={() => copyToClipboard(selectedCreateApiUserExample, `${adminApiLanguageLabels[selectedAdminApiLanguage]} example`)}
+                  >
+                    <CopyIcon />
+                    Copy {adminApiLanguageLabels[selectedAdminApiLanguage]}
+                  </button>
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-line bg-cloud p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="drive-badge bg-signal/10 text-signal">POST</span>
+                    <span className="font-mono text-sm text-ink">/auth/login</span>
+                    <span className="drive-badge bg-signal/10 text-signal">POST</span>
+                    <span className="font-mono text-sm text-ink">/admin/api-users</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {adminApiLanguages.map((language) => (
+                    <button
+                      key={language}
+                      className={`rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                        selectedAdminApiLanguage === language
+                          ? 'bg-ink text-white'
+                          : 'border border-line bg-cloud text-slate'
+                      }`}
+                      onClick={() => setSelectedAdminApiLanguage(language)}
+                    >
+                      {adminApiLanguageLabels[language]}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-3xl bg-[#101826] p-5 text-white shadow-inner">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-slate-100">
+                    <code>{selectedCreateApiUserExample}</code>
+                  </pre>
+                </div>
+
+                <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Create User Response</p>
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-4 font-mono text-[13px] leading-6 text-slate">
+                    <code>{`{
   "user": {
     "id": "user-id",
     "name": "Customer Support Bot",
@@ -1626,45 +1735,45 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
     "label": "Primary session"
   }
 }`}</code>
-                </pre>
-              </div>
-
-              <div className="mt-8 border-t border-line pt-8">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-2xl font-semibold text-ink">Get Active API Key by Email</h3>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate">
-                      Use this admin endpoint to fetch the currently active API key for an API user by email.
-                    </p>
-                  </div>
-                  <button
-                    className="drive-button-secondary"
-                    onClick={() => copyToClipboard(selectedActiveApiKeyExample, `${adminApiLanguageLabels[selectedAdminApiLanguage]} active key example`)}
-                  >
-                    <CopyIcon />
-                    Copy {adminApiLanguageLabels[selectedAdminApiLanguage]}
-                  </button>
-                </div>
-
-                <div className="mt-6 rounded-[24px] border border-line bg-cloud p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="drive-badge bg-signal/10 text-signal">POST</span>
-                    <span className="font-mono text-sm text-ink">/auth/login</span>
-                    <span className="drive-badge bg-signal/10 text-signal">GET</span>
-                    <span className="font-mono text-sm text-ink">/admin/api-users/active-api-key?email=support-api@example.com</span>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-3xl bg-[#101826] p-5 text-white shadow-inner">
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-slate-100">
-                    <code>{selectedActiveApiKeyExample}</code>
                   </pre>
                 </div>
 
-                <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Active API Key Response</p>
-                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-4 font-mono text-[13px] leading-6 text-slate">
-                    <code>{`{
+                <div className="mt-8 border-t border-line pt-8">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-2xl font-semibold text-ink">Get Active API Key by Email</h3>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate">
+                        Use this admin endpoint to fetch the currently active API key for an API user by email.
+                      </p>
+                    </div>
+                    <button
+                      className="drive-button-secondary"
+                      onClick={() => copyToClipboard(selectedActiveApiKeyExample, `${adminApiLanguageLabels[selectedAdminApiLanguage]} active key example`)}
+                    >
+                      <CopyIcon />
+                      Copy {adminApiLanguageLabels[selectedAdminApiLanguage]}
+                    </button>
+                  </div>
+
+                  <div className="mt-6 rounded-[24px] border border-line bg-cloud p-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="drive-badge bg-signal/10 text-signal">POST</span>
+                      <span className="font-mono text-sm text-ink">/auth/login</span>
+                      <span className="drive-badge bg-signal/10 text-signal">GET</span>
+                      <span className="font-mono text-sm text-ink">/admin/api-users/active-api-key?email=support-api@example.com</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-3xl bg-[#101826] p-5 text-white shadow-inner">
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-slate-100">
+                      <code>{selectedActiveApiKeyExample}</code>
+                    </pre>
+                  </div>
+
+                  <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Active API Key Response</p>
+                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-4 font-mono text-[13px] leading-6 text-slate">
+                      <code>{`{
   "user": {
     "id": "user-id",
     "name": "Customer Support Bot",
@@ -1679,9 +1788,10 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
     "lastUsedAt": null
   }
 }`}</code>
-                  </pre>
+                    </pre>
+                  </div>
                 </div>
-              </div>
+              </section>
             </section>
           ) : null}
 
