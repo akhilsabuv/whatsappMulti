@@ -194,6 +194,99 @@ echo $response;`,
   };
 }
 
+function buildGetActiveApiKeyExamples(apiBaseUrl: string): Record<AdminApiLanguage, string> {
+  const loginEndpoint = `${apiBaseUrl}/auth/login`;
+  const activeKeyEndpoint = `${apiBaseUrl}/admin/api-users/active-api-key`;
+  const encodedEmail = 'support-api%40example.com';
+
+  return {
+    curl: `curl -X POST '${loginEndpoint}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "email": "admin@example.com",
+    "password": "admin-password"
+  }'
+
+curl -X GET '${activeKeyEndpoint}?email=${encodedEmail}' \\
+  -H 'Authorization: Bearer ADMIN_ACCESS_TOKEN'`,
+    javascript: `const loginResponse = await fetch('${loginEndpoint}', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    email: 'admin@example.com',
+    password: 'admin-password',
+  }),
+});
+
+const { accessToken } = await loginResponse.json();
+const email = encodeURIComponent('support-api@example.com');
+
+const response = await fetch(\`${activeKeyEndpoint}?email=\${email}\`, {
+  headers: {
+    Authorization: \`Bearer \${accessToken}\`,
+  },
+});
+
+const data = await response.json();
+console.log(data.apiKey.rawKey);`,
+    python: `import requests
+
+login_response = requests.post(
+    '${loginEndpoint}',
+    json={
+        'email': 'admin@example.com',
+        'password': 'admin-password',
+    },
+)
+
+access_token = login_response.json()['accessToken']
+
+response = requests.get(
+    '${activeKeyEndpoint}',
+    headers={
+        'Authorization': f'Bearer {access_token}',
+    },
+    params={
+        'email': 'support-api@example.com',
+    },
+)
+
+print(response.json()['apiKey']['rawKey'])`,
+    php: `<?php
+
+$loginPayload = json_encode([
+    'email' => 'admin@example.com',
+    'password' => 'admin-password',
+]);
+
+$loginResponse = file_get_contents('${loginEndpoint}', false, stream_context_create([
+    'http' => [
+        'method' => 'POST',
+        'header' => [
+            'Content-Type: application/json',
+        ],
+        'content' => $loginPayload,
+    ],
+]));
+
+$accessToken = json_decode($loginResponse, true)['accessToken'];
+$email = urlencode('support-api@example.com');
+
+$response = file_get_contents('${activeKeyEndpoint}?email=' . $email, false, stream_context_create([
+    'http' => [
+        'method' => 'GET',
+        'header' => [
+            'Authorization: Bearer ' . $accessToken,
+        ],
+    ],
+]));
+
+echo $response;`,
+  };
+}
+
 async function fetchJson(path: string, _token?: string) {
   const response = await fetch(`${apiUrl}${path}`, {
     credentials: 'include',
@@ -940,6 +1033,8 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
   const connectionRate = summary?.sessions ? Math.round(((summary.connectedCount ?? 0) / summary.sessions) * 100) : 0;
   const createApiUserExamples = buildCreateApiUserExamples(apiUrl);
   const selectedCreateApiUserExample = createApiUserExamples[selectedAdminApiLanguage];
+  const activeApiKeyExamples = buildGetActiveApiKeyExamples(apiUrl);
+  const selectedActiveApiKeyExample = activeApiKeyExamples[selectedAdminApiLanguage];
 
   const canViewSessionHealth = user.role === 'SUPERADMIN';
   const activeView = canViewSessionHealth || currentView !== 'sessions' ? currentView : 'overview';
@@ -1532,6 +1627,60 @@ export function DashboardClient({ initialView = 'overview' }: { initialView?: Da
   }
 }`}</code>
                 </pre>
+              </div>
+
+              <div className="mt-8 border-t border-line pt-8">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-2xl font-semibold text-ink">Get Active API Key by Email</h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate">
+                      Use this admin endpoint to fetch the currently active API key for an API user by email.
+                    </p>
+                  </div>
+                  <button
+                    className="drive-button-secondary"
+                    onClick={() => copyToClipboard(selectedActiveApiKeyExample, `${adminApiLanguageLabels[selectedAdminApiLanguage]} active key example`)}
+                  >
+                    <CopyIcon />
+                    Copy {adminApiLanguageLabels[selectedAdminApiLanguage]}
+                  </button>
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-line bg-cloud p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="drive-badge bg-signal/10 text-signal">POST</span>
+                    <span className="font-mono text-sm text-ink">/auth/login</span>
+                    <span className="drive-badge bg-signal/10 text-signal">GET</span>
+                    <span className="font-mono text-sm text-ink">/admin/api-users/active-api-key?email=support-api@example.com</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-3xl bg-[#101826] p-5 text-white shadow-inner">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-slate-100">
+                    <code>{selectedActiveApiKeyExample}</code>
+                  </pre>
+                </div>
+
+                <div className="mt-5 rounded-[24px] border border-line bg-cloud p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-signal">Active API Key Response</p>
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-4 font-mono text-[13px] leading-6 text-slate">
+                    <code>{`{
+  "user": {
+    "id": "user-id",
+    "name": "Customer Support Bot",
+    "email": "support-api@example.com"
+  },
+  "apiKey": {
+    "id": "key-id",
+    "name": "Customer Support Bot Default Key",
+    "rawKey": "AIza...",
+    "isActive": true,
+    "createdAt": "2026-04-30T10:00:00.000Z",
+    "lastUsedAt": null
+  }
+}`}</code>
+                  </pre>
+                </div>
               </div>
             </section>
           ) : null}

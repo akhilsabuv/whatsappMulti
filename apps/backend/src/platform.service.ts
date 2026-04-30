@@ -361,6 +361,72 @@ export class PlatformService {
     };
   }
 
+  async getActiveApiKeyForManagedUserByEmail(admin: UserEntity, email: string) {
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      throw new BadRequestException('A valid email is required');
+    }
+
+    const managedUser = await this.prisma.user.findFirst({
+      where: {
+        email: normalizedEmail,
+        role: UserRole.API_USER,
+        ...(admin.role === UserRole.SUPERADMIN ? {} : { parentAdminId: admin.id }),
+      },
+    });
+
+    if (!managedUser) {
+      throw new NotFoundException('API user not found');
+    }
+
+    const activeKey = await this.prisma.apiKey.findFirst({
+      where: {
+        userId: managedUser.id,
+        isActive: true,
+        revokedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        rawKeyEnc: true,
+        isActive: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!activeKey) {
+      throw new NotFoundException('Active API key not found');
+    }
+
+    let rawKey = null;
+    if (activeKey.rawKeyEnc) {
+      try {
+        rawKey = this.decrypt(activeKey.rawKeyEnc);
+      } catch {
+        rawKey = '<Decryption Error: Secret Changed>';
+      }
+    }
+
+    return {
+      user: {
+        id: managedUser.id,
+        name: managedUser.name,
+        email: managedUser.email,
+      },
+      apiKey: {
+        id: activeKey.id,
+        name: activeKey.name,
+        rawKey,
+        isActive: activeKey.isActive,
+        createdAt: activeKey.createdAt,
+        lastUsedAt: activeKey.lastUsedAt,
+      },
+      docs: this.getApiUserDocsMetadata(),
+    };
+  }
+
   async revokeManagedUserPortalLinks(admin: UserEntity, userId: string) {
     const managedUser = await this.assertManagedApiUser(admin, userId);
     const updated = await this.prisma.user.update({

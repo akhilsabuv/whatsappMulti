@@ -49,6 +49,9 @@ test('role and ownership guards cover admin and API-key access paths', () => {
   assert.match(platform, /assertManagedApiUser/);
   assert.match(platform, /assertManagedSession/);
   assert.match(platform, /parentAdminId: admin.id/);
+  assert.match(adminController, /api-users\/active-api-key/);
+  assert.match(platform, /getActiveApiKeyForManagedUserByEmail/);
+  assert.match(platform, /email: normalizedEmail/);
 });
 
 test('uploads are content-sniffed, optionally malware-scanned, and cleaned up', () => {
@@ -76,4 +79,3 @@ test('queue failures are captured for dead-letter observability', () => {
   assert.match(workerObservability, /ALERT_WEBHOOK_URL/);
   assert.match(backendObservability, /recentDeadLetters/);
 });
-

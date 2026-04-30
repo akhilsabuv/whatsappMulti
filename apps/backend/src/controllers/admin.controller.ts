@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@whatsapp-platform/common';
 import { ChangePasswordDto, CreateApiKeyDto, CreateApiUserDto, CreateSessionDto, StatusDto } from '../dto';
@@ -26,6 +26,11 @@ export class AdminController {
       ...body,
       role: UserRole.API_USER,
     });
+  }
+
+  @Get('api-users/active-api-key')
+  activeApiKeyByEmail(@Req() request: { user: UserEntity }, @Query('email') email: string) {
+    return this.platformService.getActiveApiKeyForManagedUserByEmail(request.user, email);
   }
 
   @Get('users')
