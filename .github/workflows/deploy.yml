@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: '30 17 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -102,6 +104,7 @@ jobs:
           git push origin main
 
       - name: Upload release
+        if: github.event_name != 'schedule'
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -124,6 +127,7 @@ jobs:
           scp -i ~/.ssh/deploy_key -P "$SSH_PORT" /tmp/whatsapp-release.tgz "$SSH_USER@$SSH_HOST:/tmp/whatsapp-release.tgz"
 
       - name: Deploy with Docker Compose
+        if: github.event_name != 'schedule'
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}

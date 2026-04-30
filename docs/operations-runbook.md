@@ -17,7 +17,8 @@
 
 ## Backup
 
-Deploys run a PostgreSQL backup before the Docker Compose update. To push those dumps to
+GitHub Actions runs a PostgreSQL backup every day at 11:00 PM IST (`17:30 UTC`).
+Deploys also run a PostgreSQL backup before the Docker Compose update. To push those dumps to
 `git@github.com:akhilsabuv/whatsappMultiBackupDB.git`, configure the production Actions
 secret `BACKUP_REPO_SSH_KEY` with a write-enabled deploy key for that backup repository.
 
