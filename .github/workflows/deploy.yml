@@ -57,8 +57,8 @@ jobs:
           . ./.env
           set +a
 
-          # Ensure docker components are running before attempting backup
-          docker compose -f docker-compose.prod.yml up -d
+          # Ensure postgres is running before attempting backup
+          docker compose -f docker-compose.prod.yml up -d postgres
           
           # Wait a few seconds for postgres to be ready if it was just started
           sleep 5
@@ -238,6 +238,7 @@ jobs:
           sed -i "s/YOUR_DOMAIN_HERE/$DOMAIN/g" /tmp/maintenance.conf
 
           if sudo test -f "$DEPLOY_PATH/certbot/conf/live/$DOMAIN/fullchain.pem"; then
+            docker rm -f maintenance-page || true
             docker run -d --name maintenance-page -p 80:80 -p 443:443 \
               -v "/tmp/maintenance:/usr/share/nginx/html:ro" \
               -v "/tmp/maintenance.conf:/etc/nginx/conf.d/default.conf:ro" \
